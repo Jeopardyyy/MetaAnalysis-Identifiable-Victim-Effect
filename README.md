@@ -15,7 +15,7 @@ Lee and Feeley (2016) meta-analysed 41 study-level comparisons of helping identi
 
 ## Key findings
 
-- REML re-analysis produced an almost identical point estimate to the original (r = .053 vs. r = .05), but a p-value that narrowly missed conventional significance (p = .078 vs. p = .038) — the same 41 effect sizes, different variance estimator, different significance conclusion.
+- REML re-analysis produced an almost identical point estimate to the original (r = .053 vs. r = .05), but a p-value that narrowly missed conventional significance (p = .078 vs. p = .038) - the same 41 effect sizes, different variance estimator, different significance conclusion.
 - Neither Egger's test nor trim-and-fill found evidence of publication bias; trim-and-fill estimated zero missing studies.
 - Substantial heterogeneity across studies (I² ≈ 74.7%), so the "no missing studies" result is read here as "no detectable small-study effect" rather than proof publication bias is absent.
 
@@ -25,17 +25,17 @@ Full discussion, limitations, and references are in the report itself.
 
 | File | Description |
 |---|---|
-| `Analysis.Rmd` | R Markdown source — full code, commentary, and write-up |
+| `Analysis.Rmd` | R Markdown source - full code, commentary, and write-up |
 | `Analysis.html` | Knitted report (open in a browser, or view via [htmlpreview](https://htmlpreview.github.io/)) |
 | `table1.csv` | Study-level effect sizes (r, N) extracted from the paper's Table 1 |
 
-The original paper is not included here for copyright reasons — see [DOI: 10.1080/15534510.2016.1216891](https://doi.org/10.1080/15534510.2016.1216891).
+The original paper is not included here for copyright reasons - see [DOI: 10.1080/15534510.2016.1216891](https://doi.org/10.1080/15534510.2016.1216891).
 
 ## Reproducing this
 
 ```r
 install.packages(c("tidyverse", "metafor", "readr", "knitr"))
-rmarkdown::render("analysis.Rmd")
+rmarkdown::render("Analysis.Rmd")
 ```
 
 Seed is set (`set.seed(20)`) for full reproducibility. Package versions used are listed via `sessionInfo()` at the end of the report.
@@ -43,10 +43,10 @@ Seed is set (`set.seed(20)`) for full reproducibility. Package versions used are
 ## Limitations
 
 - Only two publication-bias methods were implemented within the task's time constraints (PET-PEESE or selection models could add further insight)
-- With only 41 studies, bias-detection methods have limited power — results are suggestive, not conclusive
+- With only 41 studies, bias-detection methods have limited power - results are suggestive, not conclusive
 - Some studies share authors/samples (e.g. multiple Kogut & Ritov experiments); dependency between these is not modelled
 - No moderator analyses were conducted despite substantial heterogeneity
 
 ## References
 
-Full reference list is in `analysis.Rmd` / `analysis.html`.
+Full reference list is in `Analysis.Rmd` / `Analysis.html`.
