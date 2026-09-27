@@ -1,0 +1,273 @@
+---
+title: "Re-analysis of the Identifiable Victim Effect"
+author: "Aathira Harish Pillai"
+date: "7th August 2026"
+output:
+  html_document:
+    theme: paper
+    toc: true
+---
+
+```{r setup, include=FALSE}
+#Setting the seed here for full reproducibility, especially for the iterative trim-and-fill algorithm later.
+
+set.seed(seed = 20) #It just happens to be my lucky number
+```
+
+## Introduction:
+
+The 'identifiable victim effect' refers to the tendency for individuals to be more willing to help a specific, identifiable person than to an anonymous, statistical victim/group of victims.
+
+Lee and Feeley (2016) meta-analysed 41 study-level comparisons of helping identified vs. unidentified ("statistical") victims and reported a small, just-significant overall effect (r ≈ .05). Small effects estimated from relatively small, heterogeneous literatures may be particularly susceptible to the influence of publication bias.
+
+### Objective:
+
+To reproduce and extend part of their analysis using the study-level effect sizes reported in Table 1 of the paper (which I've obtained from the data section accompanying the publication)
+
+Specifically, this report re-extracts the study-level data from the paper's Table 1, re-runs an unadjusted random-effects meta-analysis, and then applies several publication-bias assessment/correction methods to see whether the effect survives adjustment.
+
+Throughout the analysis, emphasis is placed on reproducibility by documenting every processing step and providing fully executable code.
+
+## Data Preparation
+
+```{r data-preparation, message=FALSE, warning=FALSE}         
+#Loading the necessary libraries
+library(tidyverse)
+library(metafor)
+library(readr)
+
+#Loading the original CSV
+table1 <- read.csv("T0001-10.1080_15534510.2016.1216891.csv")
+
+#Inspecting dataset to understand it's structure
+head(table1)
+summary(table1)
+
+#Only the study identifier, reported correlation coefficient (r),
+#and sample size (N) are required for the primary meta analysis
+#So I filter the rest out, here is table 1 updated
+
+table1_upd <- table1 %>%
+  select(Study, r, N)
+
+#The csv uses a Unicode minus sign(–) instead of the standard
+#ASCII minus (-). I'm replacing it to allow R to correctly 
+#interpret the correlation coefficients as numeric.
+
+table1_upd <- table1_upd %>%
+  mutate(
+    r=str_replace_all(r, "–", "-" ),
+    r=as.numeric(r),
+    N=parse_number(N)) #The '12,802' (N) by Lesner and Rasmussen (2014) 
+#was giving me trouble so I used parse_number to ignore commas.
+
+head(table1_upd)
+
+#Verifying that all values are converted successfully
+summary(table1_upd)
+colSums(is.na(table1_upd))
+
+#Quick peek at the cleaned and transformed data
+head(table1_upd %>% select(Study, r, N))
+```
+
+## Effect Size Calculation
+
+Meta-analysis of correlation coefficients is conventionally conducted using Fisher's z transformation rather than the raw correlation coefficient we have (r).This is because the sampling distribution of r is skewed, whereas Fisher's z is approximately normal.
+
+Fisher's z stabilizes the variance and produces effect sizes that are more suitable for statistical modelling. The transformed values are converted back to correlations when interpreting the final results.
+
+```{r effect-size-calc}         
+#I'm converting the reported correlations (r) to Fishers z values
+#and calculating the corresponding sampling variances.
+escalc_dta <- escalc(
+  measure="ZCOR",
+  ri=r,
+  ni=N,
+  data = table1_upd
+)
+
+#Inspecting the transformed effects
+summary(escalc_dta)
+head(escalc_dta)
+```
+
+#### Random-Effects Meta-analysis
+
+I fit a Random-Effects model using Restricted Maximum Likelihood (REML). I'm staying with the random-effects approach because the studies differ in their sample sizes, experimental designs/settings, interventions, and contexts.
+
+These differences make it unrealistic to assume that there is one true underlying effect size across all studies. It is more reasonable to assume that the true IVE size is a distribution that varies across studies.
+
+#### Why REML?
+
+While Lee and Feeley (2016) utilized the DerSimonian and Laird (DL) estimator, I chose the default rma() function in the metafor package, which uses REML as the standard estimator for between-study variance, as long as method isnt specified.
+
+Based on my research, REML is generally preferred in contemporary meta analyses - proven in papers like Tanriver-Ayder, E., Faes, C., McCann, S. K., & Macleod, M. R. (2021) - as it provides approximately unbiased estimates of the between study variance ($\tau^2$) by accounting for the degrees of freedom lost in estimating the fixed effects. It's particularly effective when they number of studies is small, like in this analysis.
+
+### Unadjusted Meta-analysis
+
+```{r unadjusted-meta}         
+#Now for the meta-analysis
+#Fitting using REML
+
+meta_model<- rma(
+  yi,
+  vi,
+  data=escalc_dta,
+  method = "REML"
+)
+
+#Inspecting the transformed effect sizes
+summary(meta_model)
+```
+
+The estimated average Fisher's z value and it's confidence interval are reported above. For ease of interpretation, the pooled estimate is converted back to a correlation coefficient in the following section.
+
+```{r fisher-to-corr}         
+#Converting the pooled Fisher's z estimate back into a correlation.
+
+pred_unadj <- predict(meta_model, transf = transf.ztor)
+```
+
+## Results and Interpretation
+
+The random-effects meta-analysis estimated a pooled correlation of **r = `r round(pred_unadj$pred, 3)`** (95% CI [`r round(pred_unadj$ci.lb, 3)`, `r round(pred_unadj$ci.ub, 3)`]). Although the estimated effect was positive, the confidence interval included zero and the overall effect was not statistically significant (*p* = `r signif(meta_model$pval, 3)`).
+
+The estimated between-study variance was **τ² = `r round(meta_model$tau2, 3)`** , indicating variability in the true underlying effects across studies.
+
+The estimated between-study heterogeneity was substantial (**I² = `r round(meta_model$I2, 1)`%**), suggesting that approximately `r round(meta_model$I2,1)`% of the observed variation reflects genuine differences across studies rather than sampling error alone.
+
+These findings suggest that while the identifiable victim effect is small and positive on average, it's magnitude greatly differs across studies, supporting the use of a random-effects model.
+
+Naturally, it is worth noting that this conclusion differs from Lee and Feeley's (2016) own reported result. The original paper used the DerSimonian-Laird (DL) estimator and reported a statistically significant pooled effect (r = .05, p = .038, 95% CI [.003, .10]). My REML-based re-analysis, using the same 41 effect sizes, produces an almost identical point estimate (r = .053) but a p-value that narrowly misses conventional significance (p = .078). In other words, whether the identifiable victim effect "exists" by a p < .05 threshold depends on which variance estimator is used to fit the random-effects model — a reminder that headline significance claims in small, heterogeneous meta-analyses can be sensitive to seemingly minor methodological choices!
+
+## Assessing Publication Bias
+
+Publication bias occurs when studies with statistically significant or desirable findings are more likely to be published than studies reporting small or null effects. This can lead to an overestimation of the true effect size in a meta-analysis.
+
+In order to investigate publication bias, I've taken two approaches - Egger's regression test and the trim-and-fill procedure.
+
+I've selected these two procedures because they provide complementary assessments of publication bias. Egger's test evaluates funnel plot asymmetry, whereas the trim-and-fill method estimates the number of potentially missing studies and examines how their inclusion would influence the pooled effect estimate. Using both methods provides both a statistical test and a sensitivity analysis.
+
+#### 1. Egger's regression test
+
+Conducted to statistically assess funnel plot asymmetry. This regression test evaluates whether smaller studies tend to report systematically different effect sizes than larger studies.
+
+```{r eggers-test}         
+#First, making a Funnel plot for visual assessment of publication bias
+
+funnel(meta_model,
+       xlab = "Fisher's z",
+       ylab = "Standard Error")
+
+#Eggers test
+egger_test<- regtest(meta_model,
+                     model="rma")
+
+egger_test
+```
+
+
+#### 2. Trim-and-fill procedure by Duval and Tweedie
+
+Applied to estimate the potential impact of missing unpublished studies on the pooled effect size. It is a nonparametric method designed to counter funnel plot asymmetry, which happens when small studies with negative/non-significant results are left unpublished.
+
+```{r trim-and-fill}         
+#Trim and Fill
+#Estimating the number of potentially missing studies
+#and then adjusting the pooled effect also accordingly
+
+tf <- trimfill(meta_model)
+
+summary(tf)
+
+#New funnel plot after Trim and fill
+funnel(tf,
+       xlab = "Fisher's z",
+       ylab = "Standard Error")
+```
+
+### Publication Bias: Findings
+
+We see that Egger's regression test did not provide evidence of funnel plot asymmetry (*z* = `r round(egger_test$zval,3)`, *p* = `r round(egger_test$pval,3)`), suggesting that smaller studies do not appear to report systematically different effect sizes than larger studies.
+
+The trim-and-fill procedure estimated that **no studies were missing** from the meta-analysis after all. Thus, the adjusted pooled effect size was identical to the original estimate, indicating that publication bias does not appear to have influenced the overall findings.
+
+One caveat is that trim-and-fill is known to perform poorly when funnel-plot asymmetry is driven by genuine between-study heterogeneity rather than by publication bias (Duval & Tweedie, 2000). With I² = 74.7% here, that's a real possibility. So I'd say that the "zero missing studies" result is better read as "no detectable small study effect" rather than strong proof that publication bias is absent.
+
+Taken together, both methods suggest little evidence of publication bias within the available literature, consistent with the conclusions reported by Lee and Feeley (2016).
+
+## Comparison of Effect Estimates
+
+```{r comparing-effects}         
+#Comparing original vs trim and fill
+#Extracting predictions first so I dont repeat code
+pred_orig <- predict(meta_model, transf = transf.ztor)
+pred_tf   <- predict(tf, transf = transf.ztor)
+
+comparison <- tibble(
+  Model = c("Original RE", "Trim and Fill"),
+  Estimate = c(pred_orig$pred, pred_tf$pred),
+  Lower = c(pred_orig$ci.lb, pred_tf$ci.lb),
+  Upper = c(pred_orig$ci.ub, pred_tf$ci.ub)
+)
+
+#Printing a clean table
+knitr::kable(comparison, digits = 3)
+```
+
+As shown in the table above, the publication bias adjustment did not alter the pooled estimate or confidence interval because the trim-and-fill procedure estimated zero missing studies.
+
+### Forest Plot
+
+I produce a forest plot to visualise the individual study effect sizes alongside their corresponding confidence intervals and the pooled random-effects estimate.
+
+This provides a clear overview of the variation in observed effects across studies and allows the consistency of findings to be assessed visually. It also shows the extent of heterogeneity that motivates the use of a random-effects meta-analysis.
+
+```{r forest-plot, fig.width=11, fig.height=8}         
+par(mar = c(5, 4, 2, 2)) #Increasing the outer margins so my text doesnt clip
+
+#Making a forest plot
+forest(
+  meta_model,
+  slab = table1_upd$Study,
+  cex = 0.65,#adjusting text size
+  xlab = "Correlation (Fisher's z scale)",
+  xlim = c(-3.5, 1.8),
+  )
+
+```
+
+## Conclusion
+
+My unadjusted re-analysis successfully reproduced the overall conclusions of Lee and Feeley (2016). A small positive identifiable victim effect was observed, along with considerable heterogeneity across studies. The publication bias analyses did not show any meaningful evidence of bias, and the corrected estimates were essentially identical to the original random effects model.
+
+Overall, the findings suggest that the identifiable victim effect exists but is relatively modest and varies across studies. The substantial heterogeneity observed invites future research to continue to investigate factors that may explain this variability.
+
+## Limitations
+
+1.  Due to time constraints, I could only learn and implement two publication bias methods. Although these are widely used and complementary, other approaches (eg, PET-PEESE or selection models) could provide further insight.
+
+2.  Further, with only 41 (often small) studies, the bias detection methods used here have limited statistical power; I would treat the pattern of results as suggestive rather than conclusive.
+
+3.  Several studies share authors/samples (eg, multiple Kogut & Ritov experiments), which could induce dependency not modelled here (a single-level random-effects model treats all 41 effects as independent, as the original paper did)
+
+4.  Finally, the analysis was completed within the time constraints of the assessment, and therefore no moderator analyses were conducted despite substantial between-study heterogeneity.
+
+#### Reproducibility
+
+```{r session-info}         
+sessionInfo()
+```
+
+## References
+
+1. Lee, S., & Feeley, T. H. (2016). The identifiable victim effect: a meta-analytic review. Social Influence, 11(3), 199–215. https://doi.org/10.1080/15534510.2016.1216891
+
+2. Viechtbauer, W. (2010). Conducting Meta-Analyses in R with the metafor Package. Journal of Statistical Software, 36(3), 1–48. https://doi.org/10.18637/jss.v036.i03
+
+3. Tanriver-Ayder, E., Faes, C., van de Casteele, T., McCann, S. K., & Macleod, M. R. (2021). Comparison of commonly used methods in random effects meta-analysis: application to preclinical data in drug discovery research. BMJ open science, 5(1), e100074. https://doi.org/10.1136/bmjos-2020-100074 
+
+4. Egger, M., Davey Smith, G., Schneider, M., & Minder, C. (1997). Bias in meta-analysis detected by a simple, graphical test. BMJ (Clinical research ed.), 315(7109), 629–634. https://doi.org/10.1136/bmj.315.7109.629
+
+5. Duval, S., & Tweedie, R. (2000). Trim and fill: A simple funnel-plot-based method of testing and adjusting for publication bias in meta-analysis. Biometrics, 56(2), 455–463. https://doi.org/10.1111/j.0006-341x.2000.00455.x
